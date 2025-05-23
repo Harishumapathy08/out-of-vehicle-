@@ -2,105 +2,100 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-import io
 
-# App title and style
+# Set page config
 st.set_page_config(page_title="Invoice Entry", layout="wide")
-st.markdown(
-    """
+
+# Background color using HTML
+st.markdown("""
     <style>
         body {
-            background-color: #f0f8ff;
+            background-color: #f0f4f7;
         }
         .stApp {
-            background-color: #f0f8ff;
-        }
-        .big-font {
-            font-size: 30px !important;
-            font-weight: bold;
+            background-color: #f0f4f7;
         }
     </style>
-    """, unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
-st.markdown("<div class='big-font'>📋 Monthly Invoice Entry System</div>", unsafe_allow_html=True)
-
-# File name based on current month
+# Get current month and year for Excel file name
 month_name = datetime.now().strftime("%B_%Y")
-file_name = f"invoices_{month_name}.xlsx"
+file_name = f"{month_name}.xlsx"
 
-# Ensure file exists
-if not os.path.exists(file_name):
-    df_init = pd.DataFrame(columns=[
-        "S.No.", "Invoice Date", "Invoice No", "Customer",
-        "Destination", "Dispatch Date", "Transporter",
-        "Vehicle", "Freight Charges"
-    ])
-    df_init.to_excel(file_name, index=False)
+# Column names
+columns = ["S.No.", "Invoice Date", "Invoice No", "Customer",
+           "Destination", "Dispatch Date", "Transporter",
+           "Vehicle", "Freight Charges"]
 
-# Load data
-df = pd.read_excel(file_name)
-
-# Add Entry
-with st.form("Add New Invoice"):
-    st.subheader("➕ Add Invoice Details")
-    col1, col2, col3, col4 = st.columns(4)
-    col5, col6, col7, col8 = st.columns(4)
-
-    invoice_date = col1.date_input("Invoice Date", value=datetime.today())
-    invoice_no = col2.text_input("Invoice No")
-    customer = col3.text_input("Customer")
-    destination = col4.text_input("Destination")
-    dispatch_date = col5.date_input("Dispatch Date", value=datetime.today())
-    transporter = col6.text_input("Transporter")
-    vehicle = col7.text_input("Vehicle")
-    freight_charges = col8.number_input("Freight Charges", step=0.01)
-
-    submitted = st.form_submit_button("➕ Add Entry")
-    if submitted:
-        new_entry = {
-            "S.No.": len(df) + 1,
-            "Invoice Date": invoice_date.strftime("%Y-%m-%d"),
-            "Invoice No": invoice_no,
-            "Customer": customer,
-            "Destination": destination,
-            "Dispatch Date": dispatch_date.strftime("%Y-%m-%d"),
-            "Transporter": transporter,
-            "Vehicle": vehicle,
-            "Freight Charges": freight_charges
-        }
-        df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
-        df["S.No."] = range(1, len(df) + 1)
-        df.to_excel(file_name, index=False)
-        st.success("✅ Invoice entry added successfully!")
-
-# View Data
-st.subheader("📄 All Invoice Entries")
-if not df.empty:
-    st.dataframe(df, use_container_width=True)
-
-    # Delete row
-    st.subheader("🗑️ Delete Entry by S.No.")
-    delete_sno = st.number_input("Enter S.No. to delete", min_value=1, max_value=len(df), step=1)
-    if st.button("Delete Entry"):
-        df = df[df["S.No."] != delete_sno].reset_index(drop=True)
-        df["S.No."] = range(1, len(df) + 1)
-        df.to_excel(file_name, index=False)
-        st.success(f"✅ Entry with S.No. {delete_sno} deleted.")
-
-    # Download Excel
-    st.subheader("⬇️ Download Excel File")
-    excel_buffer = io.BytesIO()
-    df.to_excel(excel_buffer, index=False)
-    excel_buffer.seek(0)
-    st.download_button(
-        "📥 Download Excel",
-        data=excel_buffer,
-        file_name=file_name,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+# Load existing data or create a new DataFrame
+if os.path.exists(file_name):
+    df = pd.read_excel(file_name)
 else:
-    st.info("No entries found yet. Add a new invoice above.")
+    df = pd.DataFrame(columns=columns)
+
+# Sanitize DataFrame
+df["S.No."] = pd.to_numeric(df["S.No."], errors='coerce').fillna(0).astype(int)
+df["Freight Charges"] = pd.to_numeric(df["Freight Charges"], errors='coerce').fillna(0.0)
+df.fillna("", inplace=True)
+
+st.title("📄 Invoice Entry System")
+
+with st.form("entry_form"):
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        invoice_date = st.date_input("Invoice Date")
+        invoice_no = st.text_input("Invoice No")
+    with col2:
+        customer = st.text_input("Customer")
+        destination = st.text_input("Destination")
+    with col3:
+        disp_date = st.date_input("Dispatch Date")
+        transporter = st.text_input("Transporter")
+    with col4:
+        vehicle = st.text_input("Vehicle")
+        freight = st.number_input("Freight Charges", min_value=0.0, format="%.2f")
+    with col5:
+        st.markdown("##")
+        submitted = st.form_submit_button("➕ Add Entry")
+
+if submitted:
+    new_entry = {
+        "S.No.": len(df) + 1,
+        "Invoice Date": invoice_date,
+        "Invoice No": invoice_no,
+        "Customer": customer,
+        "Destination": destination,
+        "Dispatch Date": disp_date,
+        "Transporter": transporter,
+        "Vehicle": vehicle,
+        "Freight Charges": freight
+    }
+    df.loc[len(df)] = new_entry
+    df.to_excel(file_name, index=False)
+    st.success("✅ Entry added and saved!")
+
+# --- Buttons ---
+colA, colB, colC = st.columns(3)
+with colA:
+    if st.button("📂 Load Data"):
+        st.dataframe(df)
+
+with colB:
+    delete_index = st.number_input("S.No. to Delete", min_value=1, max_value=len(df), step=1)
+    if st.button("🗑️ Delete Entry"):
+        df = df[df["S.No."] != delete_index]
+        df.reset_index(drop=True, inplace=True)
+        df["S.No."] = range(1, len(df) + 1)
+        df.to_excel(file_name, index=False)
+        st.success(f"Deleted entry S.No. {delete_index}")
+
+with colC:
+    download_data = df.to_excel(index=False, engine='openpyxl')
+    st.download_button("📥 Download Excel", data=download_data, file_name=file_name, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+# View below
+st.subheader("📊 Current Invoice Data")
+st.dataframe(df, use_container_width=True)
 
 
 
